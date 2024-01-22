@@ -14,11 +14,22 @@ import chisel3.stage.ChiselGeneratorAnnotation
 import dsptools._
 import dsptools.numbers.DspComplex
 
+
+class CIC_UniversalCLK extends Bundle {
+    val clock1 = Input(Clock())
+    val clock2 = Input(Clock())
+}
+
+class CIC_UniversalCTRL(val resolution : Int, val gainBits: Int) extends Bundle {
+    val convmode = Input(UInt(1.W))
+    val scale = Input(UInt(gainBits.W))
+    val shift = Input(UInt(log2Ceil(resolution).W))
+}
+
 class CIC_UniversalIO(resolution: Int, gainBits: Int) extends Bundle {
+  val clock = new CIC_UniversalCLK()
+  val control = new CIC_UniversalCTRL(resolution, gainBits)
   val in = new Bundle {
-    val clockslow = Input(Clock())
-    val integscale = Input(UInt(gainBits.W))
-    val integshift = Input(UInt(log2Ceil(resolution).W))
     val iptr_A = Input(DspComplex(SInt(resolution.W), SInt(resolution.W)))
   }
   val out = new Bundle {
@@ -27,46 +38,49 @@ class CIC_UniversalIO(resolution: Int, gainBits: Int) extends Bundle {
 }
 
 class CIC_Universal(config: CicConfig) extends Module {
-    val io = IO(new CIC_DecimatorIO(resolution=config.resolution, gainBits=config.gainBits))
+    val io = IO(new CIC_UniversalIO(resolution=config.resolution, gainBits=config.gainBits))
     val data_reso = config.resolution
     val calc_reso = config.resolution * 2
 
-    //Integrators
-    val integregs = RegInit(VecInit(Seq.fill(config.order + 1)(DspComplex.wire(0.S(calc_reso.W), 0.S(calc_reso.W)))))
-    for (i<- 0 to config.order) {
-      if (i <= 0) {
-        integregs(i) := io.in.iptr_A
-      } else {
-        integregs(i).real := integregs(i - 1).real + integregs(i).real
-        integregs(i).imag := integregs(i - 1).imag + integregs(i).imag
-      }
+    // Integrators
+    val integ = withClock(io.clock.clock1) {
+        Module(new Integ(config=config))
     }
 
-    withClock (io.in.clockslow){
-        // Registers for sampling rate reduction
-        val slowregs = RegInit(VecInit(Seq.fill(config.order + 1)(DspComplex.wire(0.S(calc_reso.W), 0.S(calc_reso.W)))))
-        val minusregs = RegInit(VecInit(Seq.fill(config.order + 1)(DspComplex.wire(0.S(calc_reso.W), 0.S(calc_reso.W)))))
-        for (i <- 0 to config.order) {
-          if (i <= 0) {
-              slowregs(i).real := integregs(config.order).real * io.in.integscale << io.in.integshift 
-              slowregs(i).imag := integregs(config.order).imag * io.in.integscale << io.in.integshift
-              minusregs(i) := slowregs(i)
-          } else {
-              slowregs(i).real := slowregs(i - 1).real - minusregs(i - 1).real
-              slowregs(i).imag := slowregs(i - 1).imag - minusregs(i - 1).imag
-              minusregs(i) := slowregs(i)
-          }
-        }
-        io.out.Z.real := slowregs(config.order).real(calc_reso - 1, calc_reso - data_reso).asSInt
-        io.out.Z.imag := slowregs(config.order).imag(calc_reso - 1, calc_reso - data_reso).asSInt
+    // Comb
+    val comb = withClock(io.clock.clock2) {
+        Module(new Comb(config=config))
+    }
+
+    integ.io.control.convmode := io.control.convmode
+    comb.io.control.convmode := io.control.convmode
+
+    when (io.control.convmode.asBool) { 
+        comb.io.in.iptr_A.real := io.in.iptr_A.real 
+        comb.io.in.iptr_A.imag := io.in.iptr_A.imag 
+
+        integ.io.in.iptr_A.real := comb.io.out.Z.real 
+        integ.io.in.iptr_A.imag := comb.io.out.Z.imag 
+
+        io.out.Z.real := integ.io.out.Z.real * io.control.scale << io.control.shift 
+        io.out.Z.imag := integ.io.out.Z.imag * io.control.scale << io.control.shift 
+    } .otherwise { 
+        integ.io.in.iptr_A.real := io.in.iptr_A.real 
+        integ.io.in.iptr_A.imag := io.in.iptr_A.imag 
+
+        comb.io.in.iptr_A.real := integ.io.out.Z.real 
+        comb.io.in.iptr_A.imag := integ.io.out.Z.imag
+
+        io.out.Z.real := comb.io.out.Z.real * io.control.scale << io.control.shift 
+        io.out.Z.imag := comb.io.out.Z.imag * io.control.scale << io.control.shift 
     }
 }
 
 class CombIO(resolution: Int, gainBits: Int) extends Bundle {
+  val control = new Bundle {
+    val convmode = Input(UInt(1.W))
+  }
   val in = new Bundle {
-    val clockslow = Input(Clock())
-    val integscale = Input(UInt(gainBits.W))
-    val integshift = Input(UInt(log2Ceil(resolution).W))
     val iptr_A = Input(DspComplex(SInt(resolution.W), SInt(resolution.W)))
   }
   val out = new Bundle {
@@ -79,31 +93,30 @@ class Comb(config: CicConfig) extends Module {
     val data_reso = config.resolution
     val calc_reso = config.resolution * 2
 
-    withClock (io.in.clockslow){
-        // Registers for sampling rate reduction
-        val slowregs = RegInit(VecInit(Seq.fill(config.order + 1)(DspComplex.wire(0.S(calc_reso.W), 0.S(calc_reso.W)))))
-        val minusregs = RegInit(VecInit(Seq.fill(config.order + 1)(DspComplex.wire(0.S(calc_reso.W), 0.S(calc_reso.W)))))
-        for (i <- 0 to config.order) {
-          if (i <= 0) {
-              slowregs(i).real := integregs(config.order).real * io.in.integscale << io.in.integshift 
-              slowregs(i).imag := integregs(config.order).imag * io.in.integscale << io.in.integshift
-              minusregs(i) := slowregs(i)
-          } else {
-              slowregs(i).real := slowregs(i - 1).real - minusregs(i - 1).real
-              slowregs(i).imag := slowregs(i - 1).imag - minusregs(i - 1).imag
-              minusregs(i) := slowregs(i)
-          }
+    val slowregs = RegInit(VecInit(Seq.fill(config.order + 1)(DspComplex.wire(0.S(calc_reso.W), 0.S(calc_reso.W)))))
+    val minusregs = RegInit(VecInit(Seq.fill(config.order + 1)(DspComplex.wire(0.S(calc_reso.W), 0.S(calc_reso.W)))))
+
+    for (i <- 0 to config.order) {
+        if (i <= 0) {
+            slowregs(i).real := Mux(io.control.convmode.asBool, RegNext(io.in.iptr_A.real), io.in.iptr_A.real) 
+            slowregs(i).imag := Mux(io.control.convmode.asBool, RegNext(io.in.iptr_A.imag), io.in.iptr_A.imag) 
+            minusregs(i) := slowregs(i)
+        } else {
+            slowregs(i).real := slowregs(i - 1).real - minusregs(i - 1).real
+            slowregs(i).imag := slowregs(i - 1).imag - minusregs(i - 1).imag
+            minusregs(i) := slowregs(i)
         }
-        io.out.Z.real := slowregs(config.order).real(calc_reso - 1, calc_reso - data_reso).asSInt
-        io.out.Z.imag := slowregs(config.order).imag(calc_reso - 1, calc_reso - data_reso).asSInt
     }
+
+    io.out.Z.real := slowregs(config.order).real(calc_reso - 1, calc_reso - data_reso).asSInt
+    io.out.Z.imag := slowregs(config.order).imag(calc_reso - 1, calc_reso - data_reso).asSInt
 }
 
 class IntegIO(resolution: Int, gainBits: Int) extends Bundle {
+  val control = new Bundle {
+    val convmode = Input(UInt(1.W))
+  }
   val in = new Bundle {
-    val clockslow = Input(Clock())
-    val integscale = Input(UInt(gainBits.W))
-    val integshift = Input(UInt(log2Ceil(resolution).W))
     val iptr_A = Input(DspComplex(SInt(resolution.W), SInt(resolution.W)))
   }
   val out = new Bundle {
@@ -120,12 +133,15 @@ class Integ(config: CicConfig) extends Module {
     val integregs = RegInit(VecInit(Seq.fill(config.order + 1)(DspComplex.wire(0.S(calc_reso.W), 0.S(calc_reso.W)))))
     for (i<- 0 to config.order) {
       if (i <= 0) {
-        integregs(i) := io.in.iptr_A
+        integregs(i).real := io.in.iptr_A.real
+        integregs(i).imag := io.in.iptr_A.imag
       } else {
         integregs(i).real := integregs(i - 1).real + integregs(i).real
         integregs(i).imag := integregs(i - 1).imag + integregs(i).imag
       }
     }
+    io.out.Z.real := RegNext(integregs(config.order).real(calc_reso - 1, calc_reso - data_reso).asSInt)
+    io.out.Z.imag := RegNext(integregs(config.order).imag(calc_reso - 1, calc_reso - data_reso).asSInt)
 }
 
 
@@ -150,7 +166,7 @@ object CIC_Universal extends App with OptionParser {
   }
 
   // Generate verilog
-  val annos = Seq(ChiselGeneratorAnnotation(() => new CIC_Decimator(config=cic_config.get)))
+  val annos = Seq(ChiselGeneratorAnnotation(() => new CIC_Universal(config=cic_config.get)))
   //(new ChiselStage).execute(arguments.toArray, annos)
   val sysverilog = (new ChiselStage).emitSystemVerilog(
     new CIC_Universal(config=cic_config.get),
