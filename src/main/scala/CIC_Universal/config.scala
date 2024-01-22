@@ -1,6 +1,6 @@
 // See LICENSE_AALTO.txt for license details
 
-package cic_decimator.config
+package cic_universal.config
 
 import net.jcazevedo.moultingyaml._
 import net.jcazevedo.moultingyaml.DefaultYamlProtocol._
