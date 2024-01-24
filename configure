@@ -75,12 +75,9 @@ TEST_TARGETS = \$(foreach name,\$(TEST_MODULES), test_\$(name))
 SBT=sbt -J-Xmx16G -J-Xss8M
 
 # Default parameters
-config_file ?= "cic-config.yml"
-td ?= "verilog/"
+td ?= "\$(VERILOGDIR)"
 
-MAINPARAMS = -config_file \$(config_file) -td \$(td)
-
-
+MAINPARAMS = -td \$(td)
 
 TOUCH=touch -r
 `for i in ${VPATHDIRS}; do
@@ -93,7 +90,7 @@ all: ${MAINMODULE}
 
 ${MAINMODULE}: \$(VERILOGDIR)/${MAINMODULE}.v
 \$(VERILOGDIR)/${MAINMODULE}.v:
-	\$(SBT) 'runMain ${PACKAGE}.${MAINMODULE} \$(MAINPARAMS) -td \$(VERILOGDIR)'
+	\$(SBT) 'runMain ${PACKAGE}.${MAINMODULE} \$(MAINPARAMS)'
 
 clean:
 	rm -f \$(VERILOGPATH)/*.v

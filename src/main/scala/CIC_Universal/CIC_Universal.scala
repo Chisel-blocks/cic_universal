@@ -56,15 +56,6 @@ class CIC_Universal(config: CicConfig) extends Module {
     comb.io.control.convmode := io.control.convmode
 
     when (io.control.convmode.asBool) { 
-        comb.io.in.iptr_A.real := io.in.iptr_A.real 
-        comb.io.in.iptr_A.imag := io.in.iptr_A.imag 
-
-        integ.io.in.iptr_A.real := comb.io.out.Z.real 
-        integ.io.in.iptr_A.imag := comb.io.out.Z.imag 
-
-        io.out.Z.real := integ.io.out.Z.real * io.control.scale << io.control.shift 
-        io.out.Z.imag := integ.io.out.Z.imag * io.control.scale << io.control.shift 
-    } .otherwise { 
         integ.io.in.iptr_A.real := io.in.iptr_A.real 
         integ.io.in.iptr_A.imag := io.in.iptr_A.imag 
 
@@ -73,6 +64,15 @@ class CIC_Universal(config: CicConfig) extends Module {
 
         io.out.Z.real := comb.io.out.Z.real * io.control.scale << io.control.shift 
         io.out.Z.imag := comb.io.out.Z.imag * io.control.scale << io.control.shift 
+    } .otherwise {         
+        comb.io.in.iptr_A.real := io.in.iptr_A.real 
+        comb.io.in.iptr_A.imag := io.in.iptr_A.imag 
+
+        integ.io.in.iptr_A.real := comb.io.out.Z.real 
+        integ.io.in.iptr_A.imag := comb.io.out.Z.imag 
+
+        io.out.Z.real := integ.io.out.Z.real * io.control.scale << io.control.shift 
+        io.out.Z.imag := integ.io.out.Z.imag * io.control.scale << io.control.shift 
     }
 }
 
@@ -98,8 +98,8 @@ class Comb(config: CicConfig) extends Module {
 
     for (i <- 0 to config.order) {
         if (i <= 0) {
-            slowregs(i).real := Mux(io.control.convmode.asBool, RegNext(io.in.iptr_A.real), io.in.iptr_A.real) 
-            slowregs(i).imag := Mux(io.control.convmode.asBool, RegNext(io.in.iptr_A.imag), io.in.iptr_A.imag) 
+            slowregs(i).real := Mux(io.control.convmode.asBool, io.in.iptr_A.real, RegNext(io.in.iptr_A.real)) 
+            slowregs(i).imag := Mux(io.control.convmode.asBool, io.in.iptr_A.imag, RegNext(io.in.iptr_A.imag)) 
             minusregs(i) := slowregs(i)
         } else {
             slowregs(i).real := slowregs(i - 1).real - minusregs(i - 1).real
@@ -107,9 +107,8 @@ class Comb(config: CicConfig) extends Module {
             minusregs(i) := slowregs(i)
         }
     }
-
-    io.out.Z.real := slowregs(config.order).real(calc_reso - 1, calc_reso - data_reso).asSInt
-    io.out.Z.imag := slowregs(config.order).imag(calc_reso - 1, calc_reso - data_reso).asSInt
+    io.out.Z.real := Mux(io.control.convmode.asBool, slowregs(config.order).real(calc_reso - 1, calc_reso - data_reso).asSInt, slowregs(config.order).real)
+    io.out.Z.imag := Mux(io.control.convmode.asBool, slowregs(config.order).imag(calc_reso - 1, calc_reso - data_reso).asSInt, slowregs(config.order).imag)
 }
 
 class IntegIO(resolution: Int, gainBits: Int) extends Bundle {
@@ -131,7 +130,7 @@ class Integ(config: CicConfig) extends Module {
 
     //Integrators
     val integregs = RegInit(VecInit(Seq.fill(config.order + 1)(DspComplex.wire(0.S(calc_reso.W), 0.S(calc_reso.W)))))
-    for (i<- 0 to config.order) {
+    for (i <- 0 to config.order) {
       if (i <= 0) {
         integregs(i).real := io.in.iptr_A.real
         integregs(i).imag := io.in.iptr_A.imag
@@ -140,8 +139,8 @@ class Integ(config: CicConfig) extends Module {
         integregs(i).imag := integregs(i - 1).imag + integregs(i).imag
       }
     }
-    io.out.Z.real := RegNext(integregs(config.order).real(calc_reso - 1, calc_reso - data_reso).asSInt)
-    io.out.Z.imag := RegNext(integregs(config.order).imag(calc_reso - 1, calc_reso - data_reso).asSInt)
+    io.out.Z.real := Mux(io.control.convmode.asBool, integregs(config.order).real, RegNext(integregs(config.order).real(calc_reso - 1, calc_reso - data_reso).asSInt))
+    io.out.Z.imag := Mux(io.control.convmode.asBool, integregs(config.order).imag, RegNext(integregs(config.order).imag(calc_reso - 1, calc_reso - data_reso).asSInt))
 }
 
 
