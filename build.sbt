@@ -13,9 +13,9 @@ val chiselVersion = "3.5.1"
 
 resolvers += "A-Core Gitlab" at "https://gitlab.com/api/v4/groups/13348068/-/packages/maven"
 
-lazy val CIC_Decimator = (project in file("."))
+lazy val CIC_Universal = (project in file("."))
   .settings(
-    name := "CIC_Decimator",
+    name := "CIC_Universal",
     libraryDependencies ++= Seq(
       "edu.berkeley.cs" %% "chisel3" % chiselVersion,
       "edu.berkeley.cs" %% "dsptools" % "1.5.6",
