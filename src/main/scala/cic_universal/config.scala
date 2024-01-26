@@ -8,26 +8,26 @@ import scala.math.BigInt
 import scala.io.Source
 import chisel3._
 
-case class CicConfig(
+case class cicConfig(
   syntax_version:     Option[Int], // None for scala instantiation
   resolution:         Int,
   order:              Int,
   gainBits:           Int
 )
 
-object CicConfig {
-  implicit val CicConfigFormat = yamlFormat4(CicConfig.apply)
+object cicConfig {
+  implicit val cicConfigFormat = yamlFormat4(cicConfig.apply)
 
   // TODO: Update this to always match the major version number of the release
   val syntaxVersion = 2
 
   /** Exception type for FIR config parsing errors */
-  class CicConfigParseException(msg: String) extends Exception(msg)
+  class cicConfigParseException(msg: String) extends Exception(msg)
 
   /** Type for representing error return values from a function */
   case class Error(msg: String) {
     /** Throw a parsing exception with a debug message. */
-    def except() = { throw new CicConfigParseException(msg) }
+    def except() = { throw new cicConfigParseException(msg) }
 
     /** Abort program execution and print out the reason */
     def panic() = {
@@ -54,7 +54,7 @@ object CicConfig {
     Left(version)
   }
 
-  def loadFromFile(filename: String): Either[CicConfig, Error] = {
+  def loadFromFile(filename: String): Either[cicConfig, Error] = {
     println(s"\nLoading cic configuration from file: $filename")
     var fileString: String = ""
     try {
@@ -77,10 +77,10 @@ object CicConfig {
       case Right(err) => return Right(err)
     }
 
-    // Parse CicConfig from YAML AST
-    val cic_config = yamlAst.convertTo[CicConfig]
+    // Parse cicConfig from YAML AST
+    val cic_config = yamlAst.convertTo[cicConfig]
 
-    val config = new CicConfig(cic_config.syntax_version, cic_config.resolution, cic_config.order, cic_config.gainBits)
+    val config = new cicConfig(cic_config.syntax_version, cic_config.resolution, cic_config.order, cic_config.gainBits)
 
     println("resolution:")
     println(config.resolution)

@@ -42,7 +42,7 @@ SCALAPATH=${ROOTPATH}/src/main/scala
 FIRRTL_JAR="$ROOTPATH/rocket-chip/firrtl/utils/bin/firrtl.jar"
 
 VPATHDIRS=`find ${SCALAPATH}/* -type d -exec basename '{}' ';'`
-MAINMODULE="CIC_Universal"
+MAINMODULE="cic_universal"
 MODULES=""
 TEST_MODULES=""
 PACKAGE="cic_universal"

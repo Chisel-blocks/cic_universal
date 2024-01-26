@@ -1,7 +1,7 @@
 // Finitie impulse filter
 package cic_universal
 import config._
-import config.{CicConfig}
+import config.{cicConfig}
 
 import java.io.File
 
@@ -15,7 +15,7 @@ import dsptools._
 import dsptools.numbers.DspComplex
 
 
-class CIC_UniversalCTRL(val resolution : Int, val gainBits: Int) extends Bundle {
+class cic_universalCTRL(val resolution : Int, val gainBits: Int) extends Bundle {
     val reset_clk = Input(Bool())    
     val Ndiv = Input(UInt(8.W))    
     val convmode = Input(UInt(1.W))
@@ -23,8 +23,8 @@ class CIC_UniversalCTRL(val resolution : Int, val gainBits: Int) extends Bundle 
     val shift = Input(UInt(log2Ceil(resolution).W))
 }
 
-class CIC_UniversalIO(resolution: Int, gainBits: Int) extends Bundle {
-    val control = new CIC_UniversalCTRL(resolution, gainBits)
+class cic_universalIO(resolution: Int, gainBits: Int) extends Bundle {
+    val control = new cic_universalCTRL(resolution, gainBits)
     val in = new Bundle {
         val iptr_A = Input(DspComplex(SInt(resolution.W), SInt(resolution.W)))
     }
@@ -33,8 +33,8 @@ class CIC_UniversalIO(resolution: Int, gainBits: Int) extends Bundle {
     }
 }
 
-class CIC_Universal(config: CicConfig) extends Module {
-    val io = IO(new CIC_UniversalIO(resolution=config.resolution, gainBits=config.gainBits))
+class cic_universal(config: cicConfig) extends Module {
+    val io = IO(new cic_universalIO(resolution=config.resolution, gainBits=config.gainBits))
     val data_reso = config.resolution
     val calc_reso = config.resolution * 2
 
@@ -137,7 +137,7 @@ class CombIO(resolution: Int, gainBits: Int) extends Bundle {
     }
 }
 
-class Comb(config: CicConfig) extends Module {
+class Comb(config: cicConfig) extends Module {
     val data_reso = config.resolution
     val calc_reso = config.resolution * 2
     val io = IO(new CombIO(resolution=calc_reso, gainBits=config.gainBits))
@@ -182,7 +182,7 @@ class IntegIO(resolution: Int, gainBits: Int) extends Bundle {
     }
 }
 
-class Integ(config: CicConfig) extends Module {
+class Integ(config: cicConfig) extends Module {
     val data_reso = config.resolution
     val calc_reso = config.resolution * 2
 
@@ -217,15 +217,15 @@ class Integ(config: CicConfig) extends Module {
 
 
 /** Generates verilog or sv*/
-object CIC_Universal extends App with OptionParser {
+object cic_universal extends App with OptionParser {
   // Parse command-line arguments
   val (options, arguments) = getopts(default_opts, args.toList)
   printopts(options, arguments)
 
   val config_file = options("config_file")
   val target_dir = options("td")
-  var cic_config: Option[CicConfig] = None
-  CicConfig.loadFromFile(config_file) match {
+  var cic_config: Option[cicConfig] = None
+  cicConfig.loadFromFile(config_file) match {
     case Left(config) => {
       cic_config = Some(config)
     }
@@ -236,10 +236,10 @@ object CIC_Universal extends App with OptionParser {
   }
 
   // Generate verilog
-  val annos = Seq(ChiselGeneratorAnnotation(() => new CIC_Universal(config=cic_config.get)))
+  val annos = Seq(ChiselGeneratorAnnotation(() => new cic_universal(config=cic_config.get)))
   //(new ChiselStage).execute(arguments.toArray, annos)
   val sysverilog = (new ChiselStage).emitSystemVerilog(
-    new CIC_Universal(config=cic_config.get),
+    new cic_universal(config=cic_config.get),
      
     //args
     Array("--target-dir", target_dir))
