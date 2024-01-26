@@ -15,26 +15,22 @@ import dsptools._
 import dsptools.numbers.DspComplex
 
 
-class CIC_UniversalCLK extends Bundle {
-    val clock1 = Input(Clock())
-    val clock2 = Input(Clock())
-}
-
 class CIC_UniversalCTRL(val resolution : Int, val gainBits: Int) extends Bundle {
+    val reset_clk = Input(Bool())    
+    val Ndiv = Input(UInt(8.W))    
     val convmode = Input(UInt(1.W))
     val scale = Input(UInt(gainBits.W))
     val shift = Input(UInt(log2Ceil(resolution).W))
 }
 
 class CIC_UniversalIO(resolution: Int, gainBits: Int) extends Bundle {
-  val clock = new CIC_UniversalCLK()
-  val control = new CIC_UniversalCTRL(resolution, gainBits)
-  val in = new Bundle {
-    val iptr_A = Input(DspComplex(SInt(resolution.W), SInt(resolution.W)))
-  }
-  val out = new Bundle {
-    val Z = Output(DspComplex(SInt(resolution.W), SInt(resolution.W)))
-  }
+    val control = new CIC_UniversalCTRL(resolution, gainBits)
+    val in = new Bundle {
+        val iptr_A = Input(DspComplex(SInt(resolution.W), SInt(resolution.W)))
+    }
+    val out = new Bundle {
+        val Z = Output(DspComplex(SInt(resolution.W), SInt(resolution.W)))
+    }
 }
 
 class CIC_Universal(config: CicConfig) extends Module {
@@ -42,18 +38,27 @@ class CIC_Universal(config: CicConfig) extends Module {
     val data_reso = config.resolution
     val calc_reso = config.resolution * 2
 
+    // clkdiv_n
+    val clkdiv_n = withReset(io.control.reset_clk) {Module(new clkdiv_n(n = 8))}
+
+    clkdiv_n.io.control.reset_clk   := io.control.reset_clk
+    clkdiv_n.io.control.Ndiv        := io.control.Ndiv
+
     // Integrators
-    val integ = withClock(io.clock.clock1) {
-        Module(new Integ(config=config))
-    }
+    val integ = Module(new Integ(config=config))
+
+    integ.io.control.convmode   := io.control.convmode
+    integ.io.control.scale      := io.control.scale
+    integ.io.control.shift      := io.control.shift
 
     // Comb
-    val comb = withClock(io.clock.clock2) {
+    val comb = withClock(clkdiv_n.io.out.clkpn.asClock) {
         Module(new Comb(config=config))
     }
 
-    integ.io.control.convmode := io.control.convmode
-    comb.io.control.convmode := io.control.convmode
+    comb.io.control.convmode    := io.control.convmode
+    comb.io.control.scale       := io.control.scale
+    comb.io.control.shift       := io.control.shift
 
     when (io.control.convmode.asBool) { 
         integ.io.in.iptr_A.real := io.in.iptr_A.real 
@@ -62,44 +67,94 @@ class CIC_Universal(config: CicConfig) extends Module {
         comb.io.in.iptr_A.real := integ.io.out.Z.real 
         comb.io.in.iptr_A.imag := integ.io.out.Z.imag
 
-        io.out.Z.real := comb.io.out.Z.real * io.control.scale << io.control.shift 
-        io.out.Z.imag := comb.io.out.Z.imag * io.control.scale << io.control.shift 
-    } .otherwise {         
+        io.out.Z.real := comb.io.out.Z.real 
+        io.out.Z.imag := comb.io.out.Z.imag 
+    } .otherwise {      
         comb.io.in.iptr_A.real := io.in.iptr_A.real 
         comb.io.in.iptr_A.imag := io.in.iptr_A.imag 
 
         integ.io.in.iptr_A.real := comb.io.out.Z.real 
         integ.io.in.iptr_A.imag := comb.io.out.Z.imag 
 
-        io.out.Z.real := integ.io.out.Z.real * io.control.scale << io.control.shift 
-        io.out.Z.imag := integ.io.out.Z.imag * io.control.scale << io.control.shift 
+        io.out.Z.real := integ.io.out.Z.real
+        io.out.Z.imag := integ.io.out.Z.imag
     }
 }
 
-class CombIO(resolution: Int, gainBits: Int) extends Bundle {
-  val control = new Bundle {
+class clkdiv_nCTRL() extends Bundle {
+    val reset_clk = Input(Bool())    
+    val Ndiv = Input(UInt(8.W))
+}
+
+class clkdiv_nIO() extends Bundle {
+    val control = new clkdiv_nCTRL()
+    val out = new Bundle {
+        val clkpn = Output(Bool())
+    }
+}
+
+class clkdiv_n (n: Int = 2) extends Module {
+    val io = IO(new clkdiv_nIO())
+    val en = Wire(Bool()) 
+    val r_Ndiv = RegInit(0.U.asTypeOf(io.control.Ndiv))
+
+    en := !io.control.reset_clk 
+    r_Ndiv := io.control.Ndiv
+
+    val stateregister = RegInit(false.B)
+    val count = RegInit(0.U(n.W))
+
+    when (en) {
+        when (count === r_Ndiv - 1.U) {
+            count := 0.U
+            stateregister := true.B
+        } .otherwise {
+            count := count + 1.U(1.W)
+            stateregister := false.B
+        }
+    }
+
+    when (r_Ndiv - 1.U === 0.U) {
+        io.out.clkpn := clock.asUInt
+    } .otherwise {
+        io.out.clkpn := RegNext(stateregister)
+    }
+}
+
+class CombIntegCTRL(val resolution : Int, val gainBits: Int) extends Bundle {
     val convmode = Input(UInt(1.W))
-  }
-  val in = new Bundle {
-    val iptr_A = Input(DspComplex(SInt(resolution.W), SInt(resolution.W)))
-  }
-  val out = new Bundle {
-    val Z = Output(DspComplex(SInt(resolution.W), SInt(resolution.W)))
-  }
+    val scale = Input(UInt(gainBits.W))
+    val shift = Input(UInt(log2Ceil(resolution).W))
+}
+
+class CombIO(resolution: Int, gainBits: Int) extends Bundle {
+    val control = new CombIntegCTRL(resolution, gainBits)
+    val in = new Bundle {
+        val iptr_A = Input(DspComplex(SInt(resolution.W), SInt(resolution.W)))
+    }
+    val out = new Bundle {
+        val Z = Output(DspComplex(SInt(resolution.W), SInt(resolution.W)))
+    }
 }
 
 class Comb(config: CicConfig) extends Module {
-    val io = IO(new CombIO(resolution=config.resolution, gainBits=config.gainBits))
     val data_reso = config.resolution
     val calc_reso = config.resolution * 2
+    val io = IO(new CombIO(resolution=calc_reso, gainBits=config.gainBits))
+
 
     val slowregs = RegInit(VecInit(Seq.fill(config.order + 1)(DspComplex.wire(0.S(calc_reso.W), 0.S(calc_reso.W)))))
     val minusregs = RegInit(VecInit(Seq.fill(config.order + 1)(DspComplex.wire(0.S(calc_reso.W), 0.S(calc_reso.W)))))
 
     for (i <- 0 to config.order) {
         if (i <= 0) {
-            slowregs(i).real := Mux(io.control.convmode.asBool, io.in.iptr_A.real, RegNext(io.in.iptr_A.real)) 
-            slowregs(i).imag := Mux(io.control.convmode.asBool, io.in.iptr_A.imag, RegNext(io.in.iptr_A.imag)) 
+            when (io.control.convmode.asBool) {
+                slowregs(i).real := io.in.iptr_A.real * io.control.scale << io.control.shift
+                slowregs(i).imag := io.in.iptr_A.imag * io.control.scale << io.control.shift 
+            } .otherwise {   
+                slowregs(i).real := RegNext(io.in.iptr_A.real)
+                slowregs(i).imag := RegNext(io.in.iptr_A.imag) 
+            }
             minusregs(i) := slowregs(i)
         } else {
             slowregs(i).real := slowregs(i - 1).real - minusregs(i - 1).real
@@ -107,40 +162,56 @@ class Comb(config: CicConfig) extends Module {
             minusregs(i) := slowregs(i)
         }
     }
-    io.out.Z.real := Mux(io.control.convmode.asBool, slowregs(config.order).real(calc_reso - 1, calc_reso - data_reso).asSInt, slowregs(config.order).real)
-    io.out.Z.imag := Mux(io.control.convmode.asBool, slowregs(config.order).imag(calc_reso - 1, calc_reso - data_reso).asSInt, slowregs(config.order).imag)
+
+    when (io.control.convmode.asBool) {
+        io.out.Z.real := slowregs(config.order).real(calc_reso - 1, calc_reso - data_reso).asSInt
+        io.out.Z.imag := slowregs(config.order).imag(calc_reso - 1, calc_reso - data_reso).asSInt
+    } .otherwise {   
+        io.out.Z.real := slowregs(config.order).real
+        io.out.Z.imag := slowregs(config.order).imag
+    }
 }
 
 class IntegIO(resolution: Int, gainBits: Int) extends Bundle {
-  val control = new Bundle {
-    val convmode = Input(UInt(1.W))
-  }
-  val in = new Bundle {
-    val iptr_A = Input(DspComplex(SInt(resolution.W), SInt(resolution.W)))
-  }
-  val out = new Bundle {
-    val Z = Output(DspComplex(SInt(resolution.W), SInt(resolution.W)))
-  }
+    val control = new CombIntegCTRL(resolution, gainBits)
+    val in = new Bundle {
+        val iptr_A = Input(DspComplex(SInt(resolution.W), SInt(resolution.W)))
+    }
+    val out = new Bundle {
+        val Z = Output(DspComplex(SInt(resolution.W), SInt(resolution.W)))
+    }
 }
 
 class Integ(config: CicConfig) extends Module {
-    val io = IO(new IntegIO(resolution=config.resolution, gainBits=config.gainBits))
     val data_reso = config.resolution
     val calc_reso = config.resolution * 2
+
+    val io = IO(new IntegIO(resolution=calc_reso, gainBits=config.gainBits))
 
     //Integrators
     val integregs = RegInit(VecInit(Seq.fill(config.order + 1)(DspComplex.wire(0.S(calc_reso.W), 0.S(calc_reso.W)))))
     for (i <- 0 to config.order) {
-      if (i <= 0) {
-        integregs(i).real := io.in.iptr_A.real
-        integregs(i).imag := io.in.iptr_A.imag
-      } else {
-        integregs(i).real := integregs(i - 1).real + integregs(i).real
-        integregs(i).imag := integregs(i - 1).imag + integregs(i).imag
-      }
+        if (i <= 0) {
+            when (io.control.convmode.asBool) {
+                integregs(i).real := io.in.iptr_A.real
+                integregs(i).imag := io.in.iptr_A.imag
+            } .otherwise {   
+                integregs(i).real := io.in.iptr_A.real * io.control.scale << io.control.shift
+                integregs(i).imag := io.in.iptr_A.imag * io.control.scale << io.control.shift
+            }
+        } else {
+            integregs(i).real := integregs(i - 1).real + integregs(i).real
+            integregs(i).imag := integregs(i - 1).imag + integregs(i).imag
+        }
     }
-    io.out.Z.real := Mux(io.control.convmode.asBool, integregs(config.order).real, RegNext(integregs(config.order).real(calc_reso - 1, calc_reso - data_reso).asSInt))
-    io.out.Z.imag := Mux(io.control.convmode.asBool, integregs(config.order).imag, RegNext(integregs(config.order).imag(calc_reso - 1, calc_reso - data_reso).asSInt))
+
+    when (io.control.convmode.asBool) {
+        io.out.Z.real := integregs(config.order).real
+        io.out.Z.imag := integregs(config.order).imag
+    } .otherwise {   
+        io.out.Z.real := RegNext(integregs(config.order).real(calc_reso - 1, calc_reso - data_reso).asSInt)
+        io.out.Z.imag := RegNext(integregs(config.order).imag(calc_reso - 1, calc_reso - data_reso).asSInt)
+    }
 }
 
 
