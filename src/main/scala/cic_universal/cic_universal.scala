@@ -17,6 +17,7 @@ import dsptools.numbers.DspComplex
 
 class cic_universalCTRL(val resolution : Int, val gainBits: Int) extends Bundle {
     val reset_clk = Input(Bool())    
+    val cic_en_clkdiv = Input(Bool())
     val Ndiv = Input(UInt(8.W))    
     val convmode = Input(UInt(1.W))
     val scale = Input(UInt(gainBits.W))
@@ -41,8 +42,8 @@ class cic_universal(config: cicConfig) extends Module {
     // clkdiv_n
     val clkdiv_n = withReset(io.control.reset_clk) {Module(new clkdiv_n(n = 8))}
 
-    clkdiv_n.io.control.reset_clk   := io.control.reset_clk
-    clkdiv_n.io.control.Ndiv        := io.control.Ndiv
+    clkdiv_n.io.control.en   := io.control.cic_en_clkdiv
+    clkdiv_n.io.control.Ndiv := io.control.Ndiv
 
     // Integrators
     val integ = Module(new Integ(config=config))
@@ -82,7 +83,7 @@ class cic_universal(config: cicConfig) extends Module {
 }
 
 class clkdiv_nCTRL() extends Bundle {
-    val reset_clk = Input(Bool())    
+    val en = Input(Bool())    
     val Ndiv = Input(UInt(8.W))
 }
 
@@ -98,7 +99,7 @@ class clkdiv_n (n: Int = 2) extends Module {
     val en = Wire(Bool()) 
     val r_Ndiv = RegInit(0.U.asTypeOf(io.control.Ndiv))
 
-    en := !io.control.reset_clk 
+    en := io.control.en
     r_Ndiv := io.control.Ndiv
 
     val stateregister = RegInit(false.B)
