@@ -21,7 +21,6 @@ class cic_universalCTRL(val resolution : Int, val gainBits: Int) extends Bundle 
     val Ndiv = Input(UInt(8.W))    
     val convmode = Input(UInt(1.W))
     val scale = Input(UInt(gainBits.W))
-    val shift = Input(UInt(log2Ceil(resolution).W))
 }
 
 class cic_universalIO(resolution: Int, gainBits: Int) extends Bundle {
@@ -50,7 +49,6 @@ class cic_universal(config: cicConfig) extends Module {
 
     integ.io.control.convmode   := io.control.convmode
     integ.io.control.scale      := io.control.scale
-    integ.io.control.shift      := io.control.shift
 
     // Comb
     val comb = withClock(clkdiv_n.io.out.clkpn.asClock) {
@@ -59,7 +57,6 @@ class cic_universal(config: cicConfig) extends Module {
 
     comb.io.control.convmode    := io.control.convmode
     comb.io.control.scale       := io.control.scale
-    comb.io.control.shift       := io.control.shift
 
     when (io.control.convmode.asBool) { 
         integ.io.in.iptr_A.real := io.in.iptr_A.real 
@@ -125,7 +122,6 @@ class clkdiv_n (n: Int = 2) extends Module {
 class CombIntegCTRL(val resolution : Int, val gainBits: Int) extends Bundle {
     val convmode = Input(UInt(1.W))
     val scale = Input(UInt(gainBits.W))
-    val shift = Input(UInt(log2Ceil(resolution).W))
 }
 
 class CombIO(resolution: Int, gainBits: Int) extends Bundle {
@@ -150,8 +146,8 @@ class Comb(config: cicConfig) extends Module {
     for (i <- 0 to config.order) {
         if (i <= 0) {
             when (io.control.convmode.asBool) {
-                slowregs(i).real := io.in.iptr_A.real << io.control.shift
-                slowregs(i).imag := io.in.iptr_A.imag << io.control.shift 
+                slowregs(i).real := io.in.iptr_A.real << io.control.scale
+                slowregs(i).imag := io.in.iptr_A.imag << io.control.scale 
             } .otherwise {   
                 slowregs(i).real := RegNext(io.in.iptr_A.real)
                 slowregs(i).imag := RegNext(io.in.iptr_A.imag) 
@@ -197,8 +193,8 @@ class Integ(config: cicConfig) extends Module {
                 integregs(i).real := io.in.iptr_A.real
                 integregs(i).imag := io.in.iptr_A.imag
             } .otherwise {   
-                integregs(i).real := io.in.iptr_A.real << io.control.shift
-                integregs(i).imag := io.in.iptr_A.imag << io.control.shift
+                integregs(i).real := io.in.iptr_A.real << io.control.scale
+                integregs(i).imag := io.in.iptr_A.imag << io.control.scale
             }
         } else {
             integregs(i).real := integregs(i - 1).real + integregs(i).real
