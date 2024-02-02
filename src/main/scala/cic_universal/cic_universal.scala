@@ -150,8 +150,8 @@ class Comb(config: cicConfig) extends Module {
     for (i <- 0 to config.order) {
         if (i <= 0) {
             when (io.control.convmode.asBool) {
-                slowregs(i).real := io.in.iptr_A.real * io.control.scale << io.control.shift
-                slowregs(i).imag := io.in.iptr_A.imag * io.control.scale << io.control.shift 
+                slowregs(i).real := io.in.iptr_A.real << io.control.shift
+                slowregs(i).imag := io.in.iptr_A.imag << io.control.shift 
             } .otherwise {   
                 slowregs(i).real := RegNext(io.in.iptr_A.real)
                 slowregs(i).imag := RegNext(io.in.iptr_A.imag) 
@@ -197,8 +197,8 @@ class Integ(config: cicConfig) extends Module {
                 integregs(i).real := io.in.iptr_A.real
                 integregs(i).imag := io.in.iptr_A.imag
             } .otherwise {   
-                integregs(i).real := io.in.iptr_A.real * io.control.scale << io.control.shift
-                integregs(i).imag := io.in.iptr_A.imag * io.control.scale << io.control.shift
+                integregs(i).real := io.in.iptr_A.real << io.control.shift
+                integregs(i).imag := io.in.iptr_A.imag << io.control.shift
             }
         } else {
             integregs(i).real := integregs(i - 1).real + integregs(i).real
