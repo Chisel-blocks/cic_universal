@@ -16,7 +16,7 @@ import dsptools.numbers.DspComplex
 
 
 class cic_universalCTRL(val resolution : Int, val gainBits: Int) extends Bundle {
-    val reset_clk = Input(Bool())    
+    val reset_loop = Input(Bool())    
     val cic_en_clkdiv = Input(Bool())
     val Ndiv = Input(UInt(8.W))    
     val convmode = Input(UInt(1.W))
@@ -39,13 +39,13 @@ class cic_universal(config: cicConfig) extends Module {
     val calc_reso = config.resolution * 2
 
     // clkdiv_n
-    val clkdiv_n = withReset(io.control.reset_clk) {Module(new clkdiv_n(n = 8))}
+    val clkdiv_n = Module(new clkdiv_n(n = 8))
 
     clkdiv_n.io.control.en   := io.control.cic_en_clkdiv
     clkdiv_n.io.control.Ndiv := io.control.Ndiv
 
     // Integrators
-    val integ = Module(new Integ(config=config))
+    val integ = withReset(io.control.reset_loop) {Module(new Integ(config=config))}
 
     integ.io.control.convmode   := io.control.convmode
     integ.io.control.scale      := io.control.scale
@@ -140,8 +140,8 @@ class Comb(config: cicConfig) extends Module {
     val io = IO(new CombIO(resolution=calc_reso, gainBits=config.gainBits))
 
 
-    val slowregs = RegInit(VecInit(Seq.fill(config.order + 1)(DspComplex.wire(0.S(calc_reso.W), 0.S(calc_reso.W)))))
-    val minusregs = RegInit(VecInit(Seq.fill(config.order + 1)(DspComplex.wire(0.S(calc_reso.W), 0.S(calc_reso.W)))))
+    val slowregs = RegInit(VecInit(Seq.fill(config.order + 1)(DspComplex(0.S(calc_reso.W), 0.S(calc_reso.W)))))
+    val minusregs = RegInit(VecInit(Seq.fill(config.order + 1)(DspComplex(0.S(calc_reso.W), 0.S(calc_reso.W)))))
 
     for (i <- 0 to config.order) {
         if (i <= 0) {
@@ -186,7 +186,7 @@ class Integ(config: cicConfig) extends Module {
     val io = IO(new IntegIO(resolution=calc_reso, gainBits=config.gainBits))
 
     //Integrators
-    val integregs = RegInit(VecInit(Seq.fill(config.order + 1)(DspComplex.wire(0.S(calc_reso.W), 0.S(calc_reso.W)))))
+    val integregs = RegInit(VecInit(Seq.fill(config.order + 1)(DspComplex(0.S(calc_reso.W), 0.S(calc_reso.W)))))
     for (i <- 0 to config.order) {
         if (i <= 0) {
             when (io.control.convmode.asBool) {
