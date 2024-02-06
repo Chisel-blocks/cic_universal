@@ -115,7 +115,7 @@ class clkdiv_n (n: Int = 2) extends Module {
     when (r_Ndiv - 1.U === 0.U) {
         io.out.clkpn := clock.asUInt
     } .otherwise {
-        io.out.clkpn := RegNext(stateregister)
+        io.out.clkpn := stateregister
     }
 }
 
