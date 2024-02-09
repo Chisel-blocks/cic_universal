@@ -14,16 +14,18 @@ import chisel3.stage.ChiselGeneratorAnnotation
 import dsptools._
 import dsptools.numbers.DspComplex
 
+class cic_universalCLK extends Bundle {
+    val slow   = Input(Clock())
+}
 
 class cic_universalCTRL(val resolution : Int, val gainBits: Int) extends Bundle {
-    val reset_loop = Input(Bool())    
-    val cic_en_clkdiv = Input(Bool())
-    val Ndiv = Input(UInt(8.W))    
+    val reset_loop = Input(Bool())   
     val convmode = Input(UInt(1.W))
     val scale = Input(UInt(gainBits.W))
 }
 
 class cic_universalIO(resolution: Int, gainBits: Int) extends Bundle {
+    val clock = new cic_universalCLK()
     val control = new cic_universalCTRL(resolution, gainBits)
     val in = new Bundle {
         val iptr_A = Input(DspComplex(SInt(resolution.W), SInt(resolution.W)))
@@ -38,12 +40,6 @@ class cic_universal(config: cicConfig) extends Module {
     val data_reso = config.resolution
     val calc_reso = config.resolution * 2
 
-    // clkdiv_n
-    val clkdiv_n = Module(new clkdiv_n(n = 8))
-
-    clkdiv_n.io.control.en   := io.control.cic_en_clkdiv
-    clkdiv_n.io.control.Ndiv := io.control.Ndiv
-
     // Integrators
     val integ = withReset(io.control.reset_loop) {Module(new Integ(config=config))}
 
@@ -51,7 +47,7 @@ class cic_universal(config: cicConfig) extends Module {
     integ.io.control.scale      := io.control.scale
 
     // Comb
-    val comb = withClock(clkdiv_n.io.out.clkpn.asClock) {
+    val comb = withClock(io.clock.slow) {
         Module(new Comb(config=config))
     }
 
@@ -76,46 +72,6 @@ class cic_universal(config: cicConfig) extends Module {
 
         io.out.Z.real := integ.io.out.Z.real
         io.out.Z.imag := integ.io.out.Z.imag
-    }
-}
-
-class clkdiv_nCTRL() extends Bundle {
-    val en = Input(Bool())    
-    val Ndiv = Input(UInt(8.W))
-}
-
-class clkdiv_nIO() extends Bundle {
-    val control = new clkdiv_nCTRL()
-    val out = new Bundle {
-        val clkpn = Output(Bool())
-    }
-}
-
-class clkdiv_n (n: Int = 2) extends Module {
-    val io = IO(new clkdiv_nIO())
-    val en = Wire(Bool()) 
-    val r_Ndiv = RegInit(0.U.asTypeOf(io.control.Ndiv))
-
-    en := io.control.en
-    r_Ndiv := io.control.Ndiv
-
-    val stateregister = RegInit(false.B)
-    val count = RegInit(0.U(n.W))
-
-    when (en) {
-        when (count === r_Ndiv - 1.U) {
-            count := 0.U
-            stateregister := true.B
-        } .otherwise {
-            count := count + 1.U(1.W)
-            stateregister := false.B
-        }
-    }
-
-    when (r_Ndiv - 1.U === 0.U) {
-        io.out.clkpn := clock.asUInt
-    } .otherwise {
-        io.out.clkpn := RegNext(stateregister)
     }
 }
 
