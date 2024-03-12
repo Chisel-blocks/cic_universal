@@ -6,8 +6,6 @@ import config.{cicConfig}
 import java.io.File
 
 import chisel3._
-import chisel3.experimental.FixedPoint
-import chisel3.util.{log2Ceil}
 import chisel3.stage.{ChiselStage, ChiselGeneratorAnnotation}
 import chisel3.stage.ChiselGeneratorAnnotation
 

@@ -9,7 +9,7 @@ ThisBuild / organization     := "Chisel-blocks"
 // Suppresses eviction errors for new sbt versions
 ThisBuild / evictionErrorLevel := Level.Info
 
-val chiselVersion = "3.5.1"
+val chiselVersion = "3.5.6"
 
 resolvers += "A-Core Gitlab" at "https://gitlab.com/api/v4/groups/13348068/-/packages/maven"
 
