@@ -2,4 +2,4 @@
 syntax_version: 2
 resolution: 16
 order: 3
-gainBits: 5
+gainBits: 10
