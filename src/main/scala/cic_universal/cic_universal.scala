@@ -6,6 +6,7 @@ import config.{cicConfig}
 import java.io.File
 
 import chisel3._
+import chisel3.util.{ShiftRegister}
 import chisel3.stage.{ChiselStage, ChiselGeneratorAnnotation}
 import chisel3.stage.ChiselGeneratorAnnotation
 
@@ -20,6 +21,8 @@ class cic_universalCTRL(val resolution : Int, val gainBits: Int) extends Bundle 
     val reset_loop = Input(Bool())   
     val convmode = Input(UInt(1.W))
     val scale = Input(UInt(gainBits.W))
+    val in_valid = Input(UInt(1.W))
+    val out_valid = Output(UInt(1.W))
 }
 
 class cic_universalIO(resolution: Int, gainBits: Int) extends Bundle {
@@ -37,6 +40,11 @@ class cic_universal(config: cicConfig) extends Module {
     val io = IO(new cic_universalIO(resolution=config.resolution, gainBits=config.gainBits))
     val data_reso = config.resolution
     val calc_reso = config.resolution * 2
+    val path_size = (2 + config.order + 1 + 2) * 2
+
+    // Valid signal
+    val valid = ShiftRegister(io.control.in_valid, path_size, (!reset.asBool && !io.control.reset_loop.asBool))
+    io.control.out_valid := valid
 
     // Integrators
     val integ = withReset(io.control.reset_loop) {Module(new Integ(config=config))}
