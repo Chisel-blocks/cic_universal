@@ -43,7 +43,7 @@ class cic_universal(config: cicConfig) extends Module {
     val path_size = (2 + config.order + 1 + 2) * 2
 
     // Valid signal
-    val valid = ShiftRegister(io.control.in_valid, path_size, (!reset.asBool && !io.control.reset_loop.asBool))
+    val valid = ShiftRegister(io.control.in_valid, path_size, 0.U, (!reset.asBool && !io.control.reset_loop.asBool))
     io.control.out_valid := valid
 
     // Integrators
